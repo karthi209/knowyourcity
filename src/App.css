@@ -1,3 +1,28 @@
 #root {
   text-align: center;
 }
+
+.custom-zoom-control {
+  position: absolute;
+  top: 70px; /* Adjust the top position to place it below the Locate Me button */
+  right: 2%; /* Align it to the right side */
+  z-index: 1000; /* Ensure it is above other elements */
+  display: flex;
+  flex-direction: column; /* Stack the buttons vertically */
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.custom-zoom-control button {
+  padding: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.custom-zoom-control button:hover {
+  background-color: #f0f0f0;
+}

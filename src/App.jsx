@@ -3,6 +3,7 @@ import './App.css';
 import 'ol/ol.css';
 import { Map, View } from 'ol';
 import TileLayer from 'ol/layer/Tile';
+import { Zoom } from 'ol/control'; // Import Zoom control
 import OSM from 'ol/source/OSM';
 import XYZ from 'ol/source/XYZ';  // Import XYZ for Carto base layer
 import { fromLonLat } from 'ol/proj';  // To transform lon/lat to map projection
@@ -43,6 +44,11 @@ function App() {
         maxZoom: 15, // Maximum zoom level
         extent: chennaiExtent,
       }),
+      controls: [
+        new Zoom({
+          className: 'custom-zoom-control',
+        }),
+      ],
     });
 
     setMap(mapInstance);
@@ -78,26 +84,25 @@ function App() {
 
   return (
     <>
-      <div id="map" style={{ width: '100%', height: '100vh' }}></div>
-      
+      <div id="map" style={{ width: '100%', height: '97vh' }}></div>
       {/* Floating Search Bar */}
-      <div className="search-bar" style={{ position: 'absolute', top: '10px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000 }}>
+      <div className="search-bar" style={{ position: 'absolute', top: '20px', left: '2%' }}>
         <input
           type="text"
           placeholder="Search location..."
           value={searchQuery}
           onChange={handleSearchChange}
-          style={{ padding: '8px', width: '250px', borderRadius: '5px', border: '1px solid #ccc' }}
+          style={{ padding: '10px', width: '300px', borderRadius: '10px', border: '1px solid #ccc', backgroundColor: 'whitesmoke' }}
         />
         <button
           onClick={handleSearch}
           style={{
-            padding: '8px 12px',
+            padding: '10px 12px',
             marginLeft: '8px',
             backgroundColor: '#007BFF',
             color: 'white',
             border: 'none',
-            borderRadius: '5px',
+            borderRadius: '10px',
             cursor: 'pointer',
           }}
         >
@@ -110,10 +115,10 @@ function App() {
         onClick={handleLocateMe}
         style={{
           position: 'absolute',
-          top: '10px',
-          left: '10px',
+          top: '20px',
+          right: '2%',
           zIndex: 1000,
-          padding: '8px 12px',
+          padding: '10px 12px',
           backgroundColor: '#28a745',
           color: 'white',
           border: 'none',
