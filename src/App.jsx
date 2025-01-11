@@ -1,22 +1,22 @@
-import React, { useEffect, useState } from "react";
-import { Button, ListGroup, Offcanvas } from "react-bootstrap";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Button, Offcanvas } from "react-bootstrap";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "ol/ol.css";
 import "./App.css";
 import { Map, View } from "ol";
 import TileLayer from "ol/layer/Tile";
-import VectorLayer from "ol/layer/Vector";
-import VectorSource from "ol/source/Vector";
-import GeoJSON from "ol/format/GeoJSON";
+import VectorTileLayer from "ol/layer/VectorTile";
+import VectorTileSource from "ol/source/VectorTile";
+import MVT from "ol/format/MVT";
 import OSM from "ol/source/OSM";
 import XYZ from "ol/source/XYZ";
 import { fromLonLat } from "ol/proj";
 import { Zoom } from "ol/control";
 import { MdMenu } from "react-icons/md";
 import { Style, Fill, Stroke } from "ol/style";
-import VectorTileLayer from "ol/layer/VectorTile";
-import VectorTileSource from "ol/source/VectorTile";
-import MVT from "ol/format/MVT";
+import Overlay from "ol/Overlay";
+import { defaults as defaultInteractions } from "ol/interaction";
+import { throttle } from "lodash";
 
 const createBaseLayer = (type) => {
   switch (type) {
@@ -24,8 +24,8 @@ const createBaseLayer = (type) => {
       return new TileLayer({
         source: new XYZ({
           url: "https://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-          minZoom: 10,  // Set minZoom for the base layer
-          maxZoom: 15,  // Set maxZoom for the base layer
+          minZoom: 10,
+          maxZoom: 15,
         }),
       });
     case "osm":
@@ -37,150 +37,167 @@ const createBaseLayer = (type) => {
 };
 
 function App() {
-  const [map, setMap] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [selectedWards, setSelectedWards] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [hoveredWard, setHoveredWard] = useState(null);
+  const [selectedWard, setSelectedWard] = useState(null);
 
-  useEffect(() => {
-    const chennaiExtent = [8802010.0, 1367438.0, 9052010.0, 1557438.0 ];
+  const mapRef = useRef(null); // Reference for the map instance
+  const popupRef = useRef(null); // Reference for the popup overlay
 
-    // Updated vector tile layer configuration
-    const vectorTileLayer = new VectorTileLayer({
-      source: new VectorTileSource({
-        format: new MVT(),
-        url: "http://localhost:8000/tiles/{z}/{x}/{y}.mvt", // Updated to use .mvt extension
-        maxZoom: 15,
-        minZoom: 10,
-        tilePixelRatio: 1,
-        tileSize: 512, // Increased tile size for better performance
-      }),
-      style: new Style({
+  const chennaiExtent = useMemo(
+    () => [8802010.0, 1367438.0, 9052010.0, 1557438.0],
+    []
+  );
+
+  const getStyle = useCallback(
+    (feature) => {
+      const wardNumber = feature.get("Ward");
+      const isHovered = hoveredWard === wardNumber;
+      const isSelected = selectedWard === wardNumber;
+
+      return new Style({
         stroke: new Stroke({
-          color: '#0080ff',
-          width: 1
+          color: isSelected ? "#FF0000" : isHovered ? "#005bb5" : "#0080ff",
+          width: isSelected ? 3 : isHovered ? 2 : 1,
         }),
         fill: new Fill({
-          color: 'rgba(0, 128, 255, 0.1)'
-        })
-      }),
-      declutter: true, // Prevents label/symbol overlap
-      updateWhileAnimating: true, // Smooth updates during animations
-      updateWhileInteracting: true, // Smooth updates during interactions
-      preload: 2 // Preload adjacent tiles
-    });
-
-    // Add error handling for tile loading
-    vectorTileLayer.getSource().on('tileloaderror', function(event) {
-      console.error('Error loading tile:', event);
-      setErrorMessage('Error loading map tiles. Please check the tile server.');
-    });
-
-    const mapInstance = new Map({
-      target: "map",
-      layers: [createBaseLayer("carto"), vectorTileLayer],
-      view: new View({
-        center: fromLonLat([80.237617, 13.067439]), // Chennai coordinates
-        zoom: 10,
-        minZoom: 10,
-        maxZoom: 15,
-        extent: chennaiExtent,
-      }),
-      controls: [new Zoom({ className: "custom-zoom-control" })],
-    });
-
-    setMap(mapInstance);
-
-    return () => {
-      mapInstance.setTarget(null);
-      vectorTileLayer.dispose();
-    };
-  }, []);
-
-  const handleWardSelection = async (wardNumber) => {
-    if (!map) return;
-  
-    try {
-      // Fetch the ward's GeoJSON
-      const response = await fetch(`/geojson/ward_${wardNumber}.geojson`);
-      if (!response.ok) throw new Error(`Failed to fetch ward ${wardNumber}`);
-      const wardGeoJSON = await response.json();
-  
-      const features = new GeoJSON().readFeatures(wardGeoJSON);
-      const wardLayer = new VectorLayer({
-        source: new VectorSource({ features }),
-        style: new Style({
-          stroke: new Stroke({ color: "#FF0000", width: 2 }),
-          fill: new Fill({ color: "rgba(255, 215, 0, 0.5)" }),
+          color: isSelected
+            ? "rgba(255, 215, 0, 0.5)"
+            : isHovered
+            ? "rgba(0, 128, 255, 0.3)"
+            : "rgba(0, 128, 255, 0.1)",
         }),
       });
-  
-      map.getLayers().forEach((layer) => {
-        if (layer !== allWardsLayer) map.removeLayer(layer); // Remove other layers
-      });
-  
-      map.addLayer(wardLayer);
-  
-      setSelectedWards([wardNumber]);
-    } catch (error) {
-      console.error(error.message);
-    }
-  };
+    },
+    [hoveredWard, selectedWard]
+  );
 
-  const handleInspectWard = async (wardNumber) => {
-    if (!map) return;
-  
-    try {
-      const response = await fetch(`/geojson/ward_${wardNumber}.geojson`);
-      if (!response.ok) throw new Error(`Failed to fetch ward ${wardNumber}`);
-      const wardGeoJSON = await response.json();
-  
-      const features = new GeoJSON().readFeatures(wardGeoJSON);
-      const wardLayer = new VectorLayer({
-        source: new VectorSource({ features }),
-        style: new Style({
-          stroke: new Stroke({ color: "#FF0000", width: 2 }),
-          fill: new Fill({ color: "rgba(255, 215, 0, 0.5)" }),
+  useEffect(() => {
+    if (!mapRef.current) {
+      // Initialize the popup overlay once
+      const popupOverlay = new Overlay({
+        element: document.createElement("div"),
+        positioning: "bottom-center",
+        offset: [0, -10],
+        stopEvent: false,
+      });
+      popupOverlay.getElement().className = "ol-popup";
+      popupRef.current = popupOverlay;
+
+      // Initialize the map instance only once
+      const vtLayer = new VectorTileLayer({
+        source: new VectorTileSource({
+          format: new MVT(),
+          url: "http://localhost:8000/tiles/{z}/{x}/{y}.mvt",
+          maxZoom: 15,
+          minZoom: 10,
+          tilePixelRatio: 1,
+          tileSize: 512,
         }),
+        style: getStyle,
+        declutter: true,
       });
-  
-      map.getLayers().forEach((layer) => {
-        map.removeLayer(layer); // Clear all layers
+
+      const mapInstance = new Map({
+        target: "map",
+        layers: [createBaseLayer("carto"), vtLayer],
+        view: new View({
+          center: fromLonLat([80.237617, 13.067439]),
+          zoom: 10,
+          minZoom: 10,
+          maxZoom: 15,
+          extent: chennaiExtent,
+        }),
+        interactions: defaultInteractions({ mouseWheelZoom: true }),
       });
-  
-      map.addLayer(wardLayer);
-      map.getView().fit(wardLayer.getSource().getExtent(), { padding: [20, 20, 20, 20] });
-  
-      setSelectedWards([wardNumber]);
-    } catch (error) {
-      console.error(error.message);
+
+      mapInstance.addOverlay(popupOverlay);
+      mapRef.current = mapInstance;
+
+      // Define event handlers for interaction
+      const handlePointerMove = throttle((event) => {
+        const feature = mapInstance.forEachFeatureAtPixel(
+          event.pixel,
+          (feature) => feature,
+          { hitTolerance: 1, layerFilter: (layer) => layer === vtLayer }
+        );
+
+        if (feature) {
+          const wardNumber = feature.get("Ward");
+          if (hoveredWard !== wardNumber) {
+            setHoveredWard(wardNumber); // Only update when necessary
+          }
+
+          const element = popupOverlay.getElement();
+          element.innerHTML = `Ward ${wardNumber}`;
+          popupOverlay.setPosition(event.coordinate);
+
+          mapInstance.getTargetElement().style.cursor = "pointer";
+        } else {
+          if (hoveredWard !== null) {
+            setHoveredWard(null); // Only update when necessary
+          }
+          popupOverlay.setPosition(undefined);
+          mapInstance.getTargetElement().style.cursor = "";
+        }
+      }, 100);
+
+      const handleClick = (event) => {
+        const feature = mapInstance.forEachFeatureAtPixel(
+          event.pixel,
+          (feature) => feature,
+          { hitTolerance: 1, layerFilter: (layer) => layer === vtLayer }
+        );
+
+        if (feature) {
+          const wardNumber = feature.get("Ward");
+          setSelectedWard(wardNumber);
+          mapInstance.getView().setCenter(event.coordinate);
+          mapInstance.getView().setZoom(12);
+        }
+      };
+
+      // Bind event listeners
+      mapInstance.on("pointermove", handlePointerMove);
+      mapInstance.on("click", handleClick);
+
+      // Ensure cleanup of listeners on component unmount
+      return () => {
+        mapInstance.un("pointermove", handlePointerMove);
+        mapInstance.un("click", handleClick);
+        popupOverlay.setPosition(undefined);
+        mapInstance.setTarget(null);
+      };
     }
-  };
+  }, [chennaiExtent, getStyle, hoveredWard, selectedWard]);
 
-  const handleShowAllWards = () => {
-    if (!map) return;
-  
-    map.getLayers().forEach((layer) => {
-      if (layer !== allWardsLayer) map.removeLayer(layer); // Remove other layers
-    });
-  
-    map.addLayer(allWardsLayer);
-    setSelectedWards([]);
-  };
+  const handleSearch = async (event) => {
+    event.preventDefault();
 
-  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setErrorMessage("Please enter a location to search.");
+      return;
+    }
+
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${searchQuery}&format=json`
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+          searchQuery
+        )}&format=json`
       );
       if (!response.ok) throw new Error("Failed to fetch location data");
+
       const results = await response.json();
-      if (results.length === 0) throw new Error("No results found");
+      if (!results || results.length === 0) {
+        throw new Error("No results found for your search query.");
+      }
 
       const { lat, lon } = results[0];
-      map.getView().setCenter(fromLonLat([parseFloat(lon), parseFloat(lat)]));
-      map.getView().setZoom(12);
+      mapRef.current.getView().setCenter(fromLonLat([parseFloat(lon), parseFloat(lat)]));
+      mapRef.current.getView().setZoom(12);
+      setErrorMessage(""); // Clear any previous error messages
     } catch (error) {
       setErrorMessage(error.message);
     }
@@ -190,132 +207,37 @@ function App() {
     <>
       <div id="map" style={{ width: "100%", height: "97vh" }}></div>
 
-      {/* Hamburger Menu */}
       <Button
         variant="primary"
-        className="d-flex align-items-center justify-content-center"
-        style={{
-          position: "absolute",
-          top: "15px",
-          left: "10px",
-          zIndex: 1000,
-          width: "40px",
-          height: "40px",
-          borderRadius: "50%",
-          backgroundColor: "#282828", // Material Design 3 color
-          border: "none"
-        }}
         onClick={() => setMenuOpen(true)}
+        style={{ position: "absolute", top: 10, left: 10 }}
       >
-        <MdMenu size={24} color="white" /> {/* Material Design icon */}
+        <MdMenu />
       </Button>
 
-      {/* Offcanvas Menu */}
-      <Offcanvas show={menuOpen} onHide={() => setMenuOpen(false)}>
+      <Offcanvas
+        show={menuOpen}
+        onHide={() => setMenuOpen(false)}
+        placement="start"
+      >
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title>Greater Chennai Corporation Wards</Offcanvas.Title>
+          <Offcanvas.Title>Chennai Map</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
-          <ListGroup>
-            {/* All Wards Option */}
-            <ListGroup.Item
-              action
-              active={selectedWards.length === 0}
-              onClick={handleShowAllWards}
-            >
-              All Wards
-            </ListGroup.Item>
-
-            {/* Individual Ward Options */}
-            {[...Array(200)].map((_, index) => {
-              const wardNumber = index + 1;
-              return (
-                <ListGroup.Item
-                  key={wardNumber}
-                  action
-                  active={selectedWards.includes(wardNumber)}
-                  onClick={() => handleWardSelection(wardNumber)}
-                >
-                  Ward {wardNumber}
-                </ListGroup.Item>
-              );
-            })}
-          </ListGroup>
+          <form onSubmit={handleSearch}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search for a location"
+            />
+            <Button variant="secondary" type="submit">
+              Search
+            </Button>
+          </form>
+          {errorMessage && <div>{errorMessage}</div>}
         </Offcanvas.Body>
       </Offcanvas>
-      {/* Locate Me Button */}
-            <Button
-              variant="success"
-              className="d-flex justify-content-center align-items-center"
-              style={{
-                position: "absolute",
-                top: "15px",
-                right: "2%",
-                zIndex: 1000,
-                width: "35px",
-                height: "35px",
-                borderRadius: "50%", // Circular button for MD3
-                boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.2)", // Subtle shadow for MD3 elevation
-                padding: 0, // Remove extra padding
-                backgroundColor: "whitesmoke",
-                border: "none"
-              }}
-              onClick={() => {
-                if (navigator.geolocation) {
-                  navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                      const { latitude, longitude } = position.coords;
-                      map.getView().setCenter(fromLonLat([longitude, latitude]));
-                      map.getView().setZoom(12);
-                    },
-                    (error) => console.error("Geolocation error:", error)
-                  );
-                }
-              }}
-            >
-              <img
-                src="/crosshair.svg"
-                alt="Locate Me"
-                style={{
-                  width: "18px", // Adjust size for MD3 iconography
-                  height: "18px",
-                }}
-              />
-            </Button>
-
-      {/* Search Bar */}
-      <div className="search-bar" style={{ position: 'absolute', top: '15px', left: '70px' }}>
-        <input
-          type="text"
-          placeholder="Search location..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            padding: '10px',
-            paddingLeft: '20px',
-            width: '300px',
-            borderRadius: '25px',
-            border: '0px solid #ccc',
-            backgroundColor: 'whitesmoke',
-            fontSize: '14px', // Material Design font size
-          }}
-        />
-        <Button onClick={handleSearch} className="md3-search-button">
-          <i className="material-icons">search</i>
-        </Button>
-      </div>
-
-      {/* Inspect Button */}
-      <Button
-        variant="warning"
-        onClick={() => selectedWards.length === 1 && handleInspectWard(selectedWards[0])}
-        disabled={selectedWards.length !== 1}
-      >
-        Inspect
-      </Button>
-
-      {/* Error Message */}
-      {errorMessage && <div className="error-message">{errorMessage}</div>}
     </>
   );
 }
