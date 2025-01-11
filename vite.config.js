@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',  // Allow external access for local dev
       port: 5173,        // Port for local dev server
       strictPort: true,  // Prevent auto-port switching
-      https: true,
+      https: false,
     },
     define: {
       'process.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL),  // Dynamically set API URL

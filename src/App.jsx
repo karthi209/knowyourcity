@@ -14,6 +14,9 @@ import { fromLonLat } from "ol/proj";
 import { Zoom } from "ol/control";
 import { MdMenu } from "react-icons/md";
 import { Style, Fill, Stroke } from "ol/style";
+import VectorTileLayer from "ol/layer/VectorTile";
+import VectorTileSource from "ol/source/VectorTile";
+import MVT from "ol/format/MVT";
 
 const createBaseLayer = (type) => {
   switch (type) {
@@ -21,6 +24,8 @@ const createBaseLayer = (type) => {
       return new TileLayer({
         source: new XYZ({
           url: "https://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+          minZoom: 10,  // Set minZoom for the base layer
+          maxZoom: 15,  // Set maxZoom for the base layer
         }),
       });
     case "osm":
@@ -40,9 +45,41 @@ function App() {
 
   useEffect(() => {
     const chennaiExtent = [8802010.0, 1367438.0, 9052010.0, 1557438.0 ];
+
+    // Updated vector tile layer configuration
+    const vectorTileLayer = new VectorTileLayer({
+      source: new VectorTileSource({
+        format: new MVT(),
+        url: "http://localhost:8000/tiles/{z}/{x}/{y}.mvt", // Updated to use .mvt extension
+        maxZoom: 15,
+        minZoom: 10,
+        tilePixelRatio: 1,
+        tileSize: 512, // Increased tile size for better performance
+      }),
+      style: new Style({
+        stroke: new Stroke({
+          color: '#0080ff',
+          width: 1
+        }),
+        fill: new Fill({
+          color: 'rgba(0, 128, 255, 0.1)'
+        })
+      }),
+      declutter: true, // Prevents label/symbol overlap
+      updateWhileAnimating: true, // Smooth updates during animations
+      updateWhileInteracting: true, // Smooth updates during interactions
+      preload: 2 // Preload adjacent tiles
+    });
+
+    // Add error handling for tile loading
+    vectorTileLayer.getSource().on('tileloaderror', function(event) {
+      console.error('Error loading tile:', event);
+      setErrorMessage('Error loading map tiles. Please check the tile server.');
+    });
+
     const mapInstance = new Map({
       target: "map",
-      layers: [createBaseLayer("carto")],
+      layers: [createBaseLayer("carto"), vectorTileLayer],
       view: new View({
         center: fromLonLat([80.237617, 13.067439]), // Chennai coordinates
         zoom: 10,
@@ -53,27 +90,12 @@ function App() {
       controls: [new Zoom({ className: "custom-zoom-control" })],
     });
 
-    // Load all wards layer
-    const allWardsLayer = new VectorLayer({
-      source: new VectorSource({
-        url: "/geojson/all_wards.geojson", // Combined GeoJSON file for all wards
-        format: new GeoJSON(),
-      }),
-      style: new Style({
-        stroke: new Stroke({
-          color: "purple", // Ward border color
-          width: 1, // Border width
-        }),
-        fill: new Fill({
-          color: "rgba(131, 134, 198, 0.11)", // Ward fill color with transparency
-        }),
-      }),
-    });
-
-    mapInstance.addLayer(allWardsLayer);
     setMap(mapInstance);
 
-    return () => mapInstance.setTarget(null);
+    return () => {
+      mapInstance.setTarget(null);
+      vectorTileLayer.dispose();
+    };
   }, []);
 
   const handleWardSelection = async (wardNumber) => {
