@@ -22,9 +22,7 @@ const createBaseLayer = (type) => {
     case "carto":
       return new TileLayer({
         source: new XYZ({
-          url: "https://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-          minZoom: 10,
-          maxZoom: 15,
+          url: "https://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}@2x.png"
         }),
       });
     case "osm":
@@ -45,41 +43,52 @@ const App = () => {
   const mapRef = useRef(null);
   const popupRef = useRef(null);
   const vtLayerRef = useRef(null);
-  const hoverRef = useRef(null); // Ref to track hover state without causing re-render
+  const hoverRef = useRef(null);
 
   const chennaiExtent = useMemo(
     () => [8802010.0, 1367438.0, 9052010.0, 1557438.0],
     []
   );
 
-  // Define styles for hover and selected features
   const getStyle = useCallback(
     (feature, isHovered = false, isSelected = false) => {
       const wardNumber = feature.get("Ward");
-      const baseStrokeColor = isSelected ? "#FF0000" : "#0080ff";
-      const baseFillColor = isSelected
-        ? "rgba(255, 215, 0, 0.5)"
+  
+      // Define improved color palette
+      const baseStrokeColor = isSelected
+        ? "hsla(220, 80%, 30%, 1)" // Dark blue for selected
         : isHovered
-        ? "rgba(255, 0, 0, 0.3)"
-        : "rgba(0, 128, 255, 0.1)";
+        ? "hsla(220, 80%, 50%, 0.8)" // Medium blue for hover
+        : "hsla(220, 20%, 60%, 0.6)"; // Light grayish blue for default
+  
+      const baseFillColor = isSelected
+        ? "hsla(220, 60%, 40%, 0.3)" // Soft blue for selected
+        : isHovered
+        ? "hsla(220, 80%, 70%, 0.2)" // Light blue for hover
+        : "hsla(220, 20%, 70%, 0.1)"; // Pale blue for default
+  
+      // Return the style object
       return new Style({
         stroke: new Stroke({
           color: baseStrokeColor,
-          width: isSelected ? 3 : 1,
+          width: isSelected ? 3 : 1.5,
         }),
         fill: new Fill({
           color: baseFillColor,
         }),
         text: new Text({
           text: isSelected ? wardNumber.toString() : "",
-          fill: new Fill({ color: "#000" }),
-          stroke: new Stroke({ color: "#fff", width: 2 }),
-          font: isSelected ? 'bold 14px Arial' : '12px Arial',
+          fill: new Fill({ color: isSelected ? "#000" : "#333" }), // Black or dark gray text
+          stroke: new Stroke({ color: "#fff", width: 2 }), // White outline for text
+          font: isSelected ? "bold 14px Arial, sans-serif" : "12px Arial, sans-serif",
+          textAlign: "center",
+          textBaseline: "middle",
         }),
       });
     },
-    [selectedWard]
+    [selectedWard] // Ensure proper React dependency management
   );
+  
 
   const memoizedGetStyle = useMemo(() => getStyle, [selectedWard]);
 
@@ -101,8 +110,6 @@ const App = () => {
       source: new VectorTileSource({
         format: new MVT(),
         url: "http://localhost:8000/tiles/{z}/{x}/{y}.mvt", // Adjust URL if needed
-        maxZoom: 15,
-        minZoom: 10,
         tilePixelRatio: 1,
         tileSize: 512,
       }),
@@ -115,8 +122,8 @@ const App = () => {
       layers: [createBaseLayer("carto"), vtLayer],
       view: new View({
         center: fromLonLat([80.237617, 13.067439]), // Center on Chennai
-        zoom: 10,
-        minZoom: 10,
+        zoom: 11,
+        minZoom: 11,
         maxZoom: 15,
         extent: chennaiExtent,
       }),
@@ -125,6 +132,41 @@ const App = () => {
 
     mapInstance.addOverlay(popupOverlay);
     mapRef.current = mapInstance;
+
+    // Apply styles immediately when the features are loaded
+    vtLayer.getSource().on('tileloadend', function (event) {
+      // Loop through features in the tile and apply initial styles
+      event.tile.getFeatures().forEach((feature) => {
+        const wardNumber = feature.get("Ward");
+        vtLayer.setStyle((f) => getStyle(f, false, f.get("Ward") === selectedWard));
+      });
+    });
+
+    let isDragging = false;
+
+    mapInstance.on('pointerdown', function () {
+      // Set dragging state and change cursor to "grabbing"
+      isDragging = true;
+      mapInstance.getTargetElement().style.cursor = 'grabbing';
+    });
+    
+    mapInstance.on('pointermove', function (event) {
+      if (!isDragging) {
+        // Check if hovering over a feature
+        const hit = mapInstance.forEachFeatureAtPixel(event.pixel, function (feature) {
+          return true; // A feature exists
+        });
+    
+        // Set cursor based on feature hit
+        mapInstance.getTargetElement().style.cursor = hit ? 'pointer' : 'grab';
+      }
+    });
+    
+    mapInstance.on('pointerup', function () {
+      // Reset dragging state and cursor to "grab"
+      isDragging = false;
+      mapInstance.getTargetElement().style.cursor = 'grab';
+    });
 
     const handlePointerMove = (event) => {
       const mapInstance = mapRef.current;
@@ -137,8 +179,6 @@ const App = () => {
         layerFilter: (layer) => layer === vtLayerRef.current,
         hitTolerance: 1,
       });
-    
-      mapInstance.getTargetElement().style.cursor = hit ? "pointer" : "grab";
     
       if (hit) {
         const feature = mapInstance.forEachFeatureAtPixel(
@@ -200,9 +240,11 @@ const App = () => {
           popupRef.current.getElement().appendChild(popupContent);
           popupRef.current.setPosition(event.coordinate);
 
+          console.log("Animating to coordinates:", event.coordinate); // Debug log
+
           mapInstance.getView().animate({
             center: event.coordinate,
-            zoom: 12,
+            zoom: 18,
             duration: 500,
           });
         } else {
