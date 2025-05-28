@@ -1,68 +1,78 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@layer base {
+  html {
+    @apply antialiased;
   }
-  a:hover {
-    color: #747bff;
+  
+  body {
+    @apply bg-gray-900 text-gray-200 font-sans text-sm;
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@layer components {
+  .panel-toggle {
+    @apply fixed z-50 w-12 h-12 flex items-center justify-center 
+           bg-gray-900/95 border border-gray-600/30 rounded-full
+           text-purple-400 cursor-pointer
+           transition-all duration-300 ease-in-out
+           hover:bg-gray-800/95 hover:border-purple-400
+           shadow-lg;
+  }
+
+  .side-panel {
+    @apply fixed z-40 bg-gray-900/95 backdrop-blur-md
+           transition-all duration-300 ease-in-out
+           border-l border-gray-600/30 shadow-lg;
+  }
+
+  .side-panel.open {
+    @apply right-0;
+  }
+
+  .option-button {
+    @apply w-full p-3 flex items-center gap-3
+           bg-gray-800/50 border border-gray-600/30 rounded-lg
+           text-gray-200 cursor-pointer
+           transition-all duration-200 ease-in-out
+           hover:bg-gray-700/50 hover:border-purple-400;
+  }
+
+  .option-button.active {
+    @apply bg-purple-400/10 border-purple-400 text-purple-400
+           hover:bg-purple-400/20;
+  }
+
+  .icon {
+    @apply text-lg text-purple-400 flex-shrink-0;
+  }
+}
+
+/* Desktop styles */
+@media (min-width: 768px) {
+  .side-panel {
+    @apply top-0 right-[-300px] w-[300px] h-screen;
+  }
+
+  .panel-toggle {
+    @apply top-5 right-5;
+  }
+}
+
+/* Mobile styles */
+@media (max-width: 767px) {
+  .side-panel {
+    @apply bottom-[-100%] left-0 w-full h-[60vh]
+           rounded-t-2xl border-l-0 border-t;
+  }
+
+  .side-panel.open {
+    @apply bottom-0;
+  }
+
+  .panel-toggle {
+    @apply bottom-5 right-5;
   }
 }

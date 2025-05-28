@@ -1,7 +1,14 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
-})
+export default defineConfig(({ mode }) => {
+  return {
+    plugins: [react()],
+    base: '/',  // This should be fine for both production and dev (as both are served from the root)
+    server: {
+      host: '0.0.0.0',  // Allow external access for local dev
+      port: 5173,        // Port for local dev server
+      strictPort: true,  // Prevent auto-port switching
+    }
+  };
+});
